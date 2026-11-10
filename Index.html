@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diary Management Challenge | Three Days</title>
+<style>
+:root{font-family:Arial,sans-serif;color:#35404b;background:#f8f6fa}*{box-sizing:border-box}body{margin:0}header{background:#e7dfef;padding:22px 30px}h1{margin:0 0 7px;font-size:25px}p{margin:5px 0}main{max-width:1450px;margin:auto;padding:18px}button{cursor:pointer;border:1px solid #c9c3cf;border-radius:9px;padding:9px 12px;background:white;color:#35404b}button:hover{background:#eee8f4}.top{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:15px}.panel{background:white;border:1px solid #e2dce7;border-radius:14px;padding:14px;box-shadow:0 2px 8px #34304a0a}.diary{display:grid;grid-template-columns:54px repeat(3,minmax(0,1fr));position:relative}.head{height:43px;text-align:center;font-weight:bold;padding:12px 0;background:#f1ebf6;border-bottom:1px solid #ddd}.head:first-child{background:white}.time{height:32px;font-size:11px;text-align:right;padding-right:6px;color:#777;transform:translateY(-6px)}.day{position:relative;height:528px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 31px,#eae7ee 31px,#eae7ee 32px);border-left:1px solid #e2dce7}.day.dragover{background-color:#f7f0ff}.event{position:absolute;left:4px;right:4px;border-radius:7px;border:1px solid #ffffffa8;padding:5px 7px;font-size:11px;overflow:hidden;cursor:grab;z-index:2;box-shadow:0 1px 3px #0001}.event strong{display:block}.event small{display:block;font-size:10px}.event.fixed{background:#d5c5e8!important;cursor:default;border:2px solid #8f70b2}.event button{float:right;padding:0 5px;border:0;background:transparent;font-size:15px}.palette{display:flex;flex-direction:column;gap:7px;max-height:620px;overflow:auto}.task{border:1px solid #e4dfe9;border-radius:9px;padding:9px;cursor:grab;font-size:13px}.task strong{display:block}.task small{color:#666}.task.selected{outline:3px solid #9678b3}.hint{font-size:12px;color:#696475;line-height:1.5}.status{font-weight:bold;font-size:13px}.pill{padding:6px 9px;border-radius:12px;background:#eae4f1;font-size:12px}.travel{background:#d8e9e7}.online{background:#d9ebf9}.review{background:#d8eee3}.obs{background:#fbe1d5}.admin{background:#fff0c9}.daily{background:#e9def8}.comms{background:#e6e9ee}.lunch{background:#f9dfeb}.meeting{background:#d5c5e8}@media(max-width:850px){.layout{grid-template-columns:1fr}.diary{min-width:650px}.scroll{overflow:auto}}
+</style></head><body>
+<header><h1>Diary Management Challenge</h1><p>Three-day assessor diary • Monday, Tuesday & Wednesday</p></header>
+<main><div class="top"><div><span class="pill">One shared workload</span> <span class="pill">Wednesday meeting fixed: 9:00–12:00</span></div><div><button id="undo">Undo last</button> <button id="reset">Reset challenge</button></div></div>
+<div class="layout"><section class="panel"><div class="top"><strong>Plan your diary</strong><span class="status" id="progress"></span></div><p class="hint">Drag a task from the right onto a day at the desired time, or select a task and click a diary slot. Drag scheduled activities to rearrange them. Tasks cannot overlap, and the Wednesday team meeting cannot move. Diary runs 8:45–17:00 in 15-minute increments.</p><div class="scroll"><div class="diary" id="diary"><div class="head"></div><div class="head">Monday</div><div class="head">Tuesday</div><div class="head">Wednesday</div></div></div><p id="message" class="hint" role="status"></p></section>
+<aside class="panel"><h3 style="margin-top:0">Activities to schedule</h3><p class="hint">A manageable three-day sample, proportionate to a 45-learner monthly caseload. The 30-minute admin follows each learner appointment. Travel is included as separate outbound and return blocks.</p><div id="palette" class="palette"></div><p class="hint">Daily tasks include journal feedback, onboarding/RPL, Power BI, Engage, OneFile, gateway/Cognisis, reporting, Functional Skills, starts export, scorecards and visit preparation.</p></aside></div></main>
+<script>
+const START=8*60+45,END=17*60,STEP=15,PIX=16;
+const templates=[
+{kind:'online',name:'Online / Show Me, Tell Me',duration:60,count:2},
+{kind:'review',name:'Online session + review',duration:90,count:1},
+{kind:'obs',name:'Observation (setting visit)',duration:60,count:1},
+{kind:'travel',name:'Travel to setting',duration:30,count:1},
+{kind:'travel',name:'Travel from setting',duration:30,count:1},
+{kind:'admin',name:'Learner admin',duration:30,count:4},
+{kind:'daily',name:'Daily tasks',duration:60,count:3},
+{kind:'comms',name:'Emails & Teams',duration:30,count:6},
+{kind:'lunch',name:'Lunch',duration:30,count:3}
+];
+let tasks=[],placed=[],selected=null,history=[];
+templates.forEach((t,i)=>{for(let j=0;j<t.count;j++)tasks.push({...t,id:`${i}-${j}`})});
+const fixed={id:'fixed',name:'Team meeting (fixed)',kind:'meeting',duration:180,day:2,start:9*60};
+const diary=document.getElementById('diary'),palette=document.getElementById('palette'),message=document.getElementById('message');
+const fmt=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+function warn(s){message.textContent=s}
+function snap(y){return START+Math.max(0,Math.min(Math.round(y/PIX),Math.floor((END-START)/STEP)))*STEP}
+function collides(day,start,duration,ignore){return [...placed,fixed].some(x=>x.day===day&&x.id!==ignore&&start<x.start+x.duration&&start+duration>x.start)}
+function valid(t,day,start,ignore){if(start<START||start+t.duration>END){warn('That appointment would extend beyond the diary hours.');return false}if(collides(day,start,t.duration,ignore)){warn('That time overlaps another activity. Try a different slot.');return false}return true}
+function save(){history.push(placed.map(x=>({...x})));if(history.length>50)history.shift()}
+function schedule(id,day,start){const t=tasks.find(x=>x.id===id)||placed.find(x=>x.id===id);if(!t)return;const old=placed.find(x=>x.id===id);if(!valid(t,day,start,id))return;save();placed=placed.filter(x=>x.id!==id);placed.push({...t,day,start});selected=null;warn(`${t.name} scheduled on ${['Monday','Tuesday','Wednesday'][day]} at ${fmt(start)}.`);render()}
+function render(){document.querySelectorAll('.day').forEach(x=>x.remove());for(let day=0;day<3;day++){let c=document.createElement('div');c.className='day';c.dataset.day=day;c.style.gridColumn=String(day+2);c.style.gridRow='2';c.addEventListener('click',e=>{if(e.target.closest('.event'))return;if(selected){let y=e.clientY-c.getBoundingClientRect().top;schedule(selected,day,snap(y))}});c.addEventListener('dragover',e=>{e.preventDefault();c.classList.add('dragover')});c.addEventListener('dragleave',()=>c.classList.remove('dragover'));c.addEventListener('drop',e=>{e.preventDefault();c.classList.remove('dragover');let id=e.dataTransfer.getData('text/plain');let y=e.clientY-c.getBoundingClientRect().top;schedule(id,day,snap(y))});for(const ev of [...placed,fixed].filter(x=>x.day===day)){let el=document.createElement('div');el.className=`event ${ev.kind} ${ev.id==='fixed'?'fixed':''}`;el.style.top=((ev.start-START)/STEP*PIX)+'px';el.style.height=(ev.duration/STEP*PIX-2)+'px';el.draggable=ev.id!=='fixed';el.innerHTML=`<strong>${ev.name}</strong><small>${fmt(ev.start)}–${fmt(ev.start+ev.duration)}</small>`;if(ev.id!=='fixed'){el.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',ev.id)});let b=document.createElement('button');b.textContent='×';b.title='Return to activity list';b.onclick=e=>{e.stopPropagation();save();placed=placed.filter(x=>x.id!==ev.id);render()};el.appendChild(b)}c.appendChild(el)}diary.appendChild(c)}
+palette.innerHTML='';for(const t of tasks.filter(x=>!placed.some(p=>p.id===x.id))){let el=document.createElement('div');el.className=`task ${t.kind} ${selected===t.id?'selected':''}`;el.draggable=true;el.innerHTML=`<strong>${t.name}</strong><small>${t.duration} minutes</small>`;el.onclick=()=>{selected=t.id;warn('Now click a time slot in the diary.');render()};el.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',t.id));palette.appendChild(el)}
+document.getElementById('progress').textContent=`${placed.length} of ${tasks.length} activities placed`;
+}
+// A dedicated first-column time rail keeps Monday, Tuesday and Wednesday aligned.
+const rail=document.createElement('div');
+rail.className='timerail';
+rail.style.cssText='grid-column:1;grid-row:2;position:relative;height:528px;background:#faf9fc;border-right:1px solid #e2dce7;z-index:1';
+for(let t=START;t<=END;t+=15){
+ const e=document.createElement('div');
+ e.style.cssText=`position:absolute;top:${(t-START)/STEP*PIX}px;right:5px;transform:translateY(-6px);font-size:10px;color:#625a70;white-space:nowrap`;
+ e.textContent=fmt(t);
+ rail.appendChild(e);
+}
+diary.appendChild(rail);
+document.getElementById('undo').onclick=()=>{if(history.length){placed=history.pop();warn('Last change undone.');render()}};document.getElementById('reset').onclick=()=>{if(confirm('Clear all scheduled activities?')){save();placed=[];selected=null;warn('Diary reset.');render()}};
+render();
+</script></body></html>
